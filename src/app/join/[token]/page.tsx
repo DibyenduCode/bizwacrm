@@ -2,24 +2,6 @@
 
 // ============================================================
 // /join/[token] — invitation redemption landing page.
-//
-// Four UI states driven by:
-//   - the peek result (server-validated invite payload), and
-//   - whether the visitor is currently authenticated.
-//
-//   ┌──────────────────────┬───────────────┬─────────────────────────┐
-//   │ peek                 │ auth          │ render                   │
-//   ├──────────────────────┼───────────────┼─────────────────────────┤
-//   │ loading              │ —             │ spinner                  │
-//   │ ok:false (any reason)│ —             │ friendly error + signup  │
-//   │ ok:true              │ signed out    │ "Sign up" + "Sign in"    │
-//   │ ok:true              │ signed in     │ "Accept" button → redeem │
-//   └──────────────────────┴───────────────┴─────────────────────────┘
-//
-// We deliberately do NOT redeem automatically on page load — the
-// invitee should confirm what account/role they're accepting.
-// Auto-redeem would also race with the signup flow returning to
-// this page after email verification.
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
@@ -29,21 +11,18 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle,
+  Clock,
   Loader2,
   MailX,
   ShieldCheck,
   UsersRound,
+  Building,
+  UserCheck,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -66,9 +45,6 @@ interface PeekFail {
 }
 type PeekResult = PeekOk | PeekFail;
 
-// Message keys per peek failure reason — resolved through `t` inside
-// the component (hooks can't run at module level). Snake_case reasons
-// come from the API; the catalogue uses camelCase leaves.
 const FAIL_KEY: Record<PeekFail['reason'], 'notFound' | 'used' | 'expired' | 'serverError'> = {
   not_found: 'notFound',
   used: 'used',
@@ -80,27 +56,16 @@ export default function JoinPage() {
   const params = useParams<{ token: string }>();
   const token = params?.token;
   const t = useTranslations('JoinPage');
-  // Role labels are shared with Settings → Members so the invite page
-  // and the member list always agree on what a role is called.
   const tRoles = useTranslations('Settings.roles');
 
   const [peek, setPeek] = useState<PeekResult | null>(null);
-  // Local auth probe — the AuthProvider lives inside the (dashboard)
-  // route group, so it doesn't reach this page. We hit Supabase
-  // directly the same way `/login` and `/signup` do.
   const [authedUserId, setAuthedUserId] = useState<string | null | undefined>(
-    undefined, // undefined = unknown / still loading; null = signed out
+    undefined,
   );
   const [accepting, setAccepting] = useState(false);
-  // `redeem_invitation` returns 409 when the caller's current account
-  // has domain data, or they're already a member of a shared account.
-  // A transient toast wasn't enough — the user has no actionable next
-  // step. Surface a blocking modal that walks them through it.
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
-  // Extracted so the "Try again" button on the server_error card
-  // can re-run the same logic without remounting the component.
   const loadPeekAndAuth = useCallback(async () => {
     if (!token) return;
     setPeek(null);
@@ -122,10 +87,6 @@ export default function JoinPage() {
     }
   }, [token]);
 
-  // Fetch peek + auth state on mount. The peek endpoint is
-  // rate-limited per-IP (30/min) so double-mounting in React 19
-  // strict mode dev is harmless. We also use the `cancelled` flag
-  // to drop setState calls if the component unmounts mid-fetch.
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -165,11 +126,6 @@ export default function JoinPage() {
         const payload = (await res.json().catch(() => ({}))) as {
           error?: string;
         };
-        // 409 = caller already has data / is in another shared
-        // account. The redeem RPC's error message is descriptive
-        // enough to show directly; we open a modal so the user has
-        // a clear next-action (sign out → use different email)
-        // rather than a 3-second toast.
         if (res.status === 409) {
           setConflictMessage(payload.error || t('conflictDefault'));
         } else {
@@ -179,8 +135,6 @@ export default function JoinPage() {
         return;
       }
       toast.success(t('welcome'));
-      // Full reload (not router.push) so AuthProvider re-fetches
-      // the profile with the new account_id and account_role.
       window.location.href = '/dashboard';
     } catch (err) {
       console.error('[join] redeem error:', err);
@@ -193,9 +147,6 @@ export default function JoinPage() {
     setSigningOut(true);
     try {
       await createClient().auth.signOut();
-      // Hard reload so the new auth state propagates everywhere
-      // (middleware, AuthProvider). Preserves the invite token in
-      // the URL so the rebuilt page renders the signed-out CTA path.
       window.location.reload();
     } catch (err) {
       console.error('[join] sign-out error:', err);
@@ -204,54 +155,68 @@ export default function JoinPage() {
     }
   }, [t]);
 
-  // ----- Loading state (peek pending OR auth not yet resolved) -----
+  // Ambient container wrapper
+  const renderContainer = (content: React.ReactNode) => (
+    <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 text-foreground relative overflow-hidden">
+      {/* Ambient Top Glow */}
+      <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-primary/10 rounded-full blur-[110px] pointer-events-none" />
+
+      <div style={{ maxWidth: "460px", width: "100%" }} className="flex flex-col items-center mx-auto relative z-10">
+        {content}
+        {/* Trust badge */}
+        <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span>Multi-Tenant Architecture & End-to-End Encryption</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ----- Loading state -----
   if (peek === null || authedUserId === undefined) {
-    return (
-      <Card className="w-full max-w-md border-border bg-card">
-        <CardContent className="flex flex-col items-center gap-3 py-12">
-          <Loader2 className="size-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">{t('verifying')}</p>
-        </CardContent>
-      </Card>
+    return renderContainer(
+      <div className="w-full bg-card text-card-foreground border border-border rounded-2xl p-8 sm:p-12 shadow-xl flex flex-col items-center gap-4 text-center">
+        <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-foreground">Verifying Invitation</h3>
+          <p className="text-xs text-muted-foreground mt-1">{t('verifying')}</p>
+        </div>
+      </div>
     );
   }
 
   // ----- Peek failed -----
   if (!peek.ok) {
     const failKey = FAIL_KEY[peek.reason];
-    return (
-      <Card className="w-full max-w-md border-border bg-card">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10">
-            <MailX className="h-6 w-6 text-red-400" />
+    return renderContainer(
+      <div className="w-full flex flex-col items-center">
+        <div className="flex flex-col items-center mb-6 text-center">
+          <div className="h-16 w-16 rounded-2xl bg-destructive/15 border border-destructive/30 flex items-center justify-center text-destructive mb-3 shadow-xs">
+            <MailX className="h-8 w-8 text-destructive" />
           </div>
-          <CardTitle className="text-xl text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {t(`fail.${failKey}Title`)}
-          </CardTitle>
-          <CardDescription className="text-muted-foreground">
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm">
             {t(`fail.${failKey}Body`)}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {/* For server_error the failure is transient — the network
-              flapped or the peek endpoint hiccupped. Try-again is
-              the right primary action; the "create account" /
-              "sign in" links stay as secondary options. Other
-              failure reasons (not_found / used / expired) are
-              terminal for this token, so no retry — just the
-              signup/sign-in escape hatches. */}
+          </p>
+        </div>
+
+        <div className="w-full bg-card text-card-foreground border border-border rounded-2xl p-6 sm:p-8 shadow-xl flex flex-col gap-3">
           {peek.reason === 'server_error' ? (
             <>
-              <Button
+              <button
                 onClick={loadPeekAndAuth}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
                 {t('tryAgain')}
-              </Button>
+              </button>
               <Link href="/signup">
                 <Button
                   variant="outline"
-                  className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="w-full h-10 border-border text-muted-foreground hover:bg-muted hover:text-foreground text-xs rounded-xl"
                 >
                   {t('createNewAccount')}
                 </Button>
@@ -260,103 +225,134 @@ export default function JoinPage() {
           ) : (
             <>
               <Link href="/signup">
-                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                  {t('createNewAccount')}
-                </Button>
+                <button className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all">
+                  <span>{t('createNewAccount')}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
               </Link>
               <Link href="/login">
                 <Button
                   variant="outline"
-                  className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="w-full h-10 border-border text-muted-foreground hover:bg-muted hover:text-foreground text-xs rounded-xl"
                 >
                   {t('signIn')}
                 </Button>
               </Link>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   // ----- Peek OK -----
-  const inviteHeader = (
-    <CardHeader className="items-center text-center">
-      <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-        <UsersRound className="h-6 w-6 text-primary" />
+  const inviteHeaderNode = (
+    <div className="flex flex-col items-center mb-6 text-center">
+      <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm mb-3">
+        <UsersRound className="h-8 w-8 text-primary" />
       </div>
-      <CardTitle className="text-xl text-foreground">
-        {t.rich('invitedTo', {
-          name: peek.account_name,
-          account: (chunks) => <span className="text-primary">{chunks}</span>,
-        })}
-      </CardTitle>
-      <CardDescription className="text-muted-foreground">
-        {t.rich('joinAs', {
-          role: tRoles(peek.role),
-          date: new Date(peek.expires_at).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-          }),
-          badge: (chunks) => (
-            <span className="inline-flex items-center gap-1 text-foreground">
-              <ShieldCheck className="size-3.5 text-primary" />
-              {chunks}
-            </span>
-          ),
-        })}
-      </CardDescription>
-    </CardHeader>
+
+      <div className="flex items-center gap-2 mb-1">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">WACRM</h1>
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-primary/15 border border-primary/30 text-primary">
+          Workspace Invitation
+        </span>
+      </div>
+
+      <p className="text-sm text-muted-foreground mt-1">
+        You have been invited to collaborate on WhatsApp conversations
+      </p>
+    </div>
+  );
+
+  // Invite Details Card Content
+  const inviteCardDetails = (
+    <div className="p-4 rounded-xl bg-muted/50 border border-border space-y-3 mb-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-foreground font-bold text-sm">
+          <Building className="h-4 w-4 text-primary shrink-0" />
+          <span>{peek.account_name}</span>
+        </div>
+        <span className="px-2 py-0.5 rounded-md text-[11px] font-bold capitalize bg-primary/15 text-primary border border-primary/25">
+          {tRoles(peek.role)} Role
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground border-t border-border/60 pt-2.5">
+        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+        <span>
+          Valid until{' '}
+          <strong className="text-foreground font-mono">
+            {new Date(peek.expires_at).toLocaleDateString(undefined, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </strong>
+        </span>
+      </div>
+    </div>
   );
 
   // ----- Authed: show Accept button -----
   if (authedUserId) {
-    return (
-      <>
-        <Card className="w-full max-w-md border-border bg-card">
-          {inviteHeader}
-          <CardContent className="flex flex-col gap-3">
-            <Button
+    return renderContainer(
+      <div className="w-full flex flex-col items-center">
+        {inviteHeaderNode}
+
+        <div className="w-full bg-card text-card-foreground border border-border rounded-2xl p-6 sm:p-8 shadow-xl">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold tracking-tight text-foreground">
+              {t.rich('invitedTo', {
+                name: peek.account_name,
+                account: (chunks) => <span className="text-primary">{chunks}</span>,
+              })}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              You are signed in and ready to join this company workspace.
+            </p>
+          </div>
+
+          {inviteCardDetails}
+
+          <div className="flex flex-col gap-3">
+            <button
               onClick={handleAccept}
               disabled={accepting}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             >
               {accepting ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
-                  {t('accepting')}
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{t('accepting')}</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle className="size-4" />
-                  {t('acceptInvitation')}
+                  <CheckCircle className="h-4 w-4" />
+                  <span>{t('acceptInvitation')}</span>
                 </>
               )}
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
+            </button>
+            <p className="text-center text-[11px] text-muted-foreground">
               {t('acceptNote', { name: peek.account_name })}
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Conflict modal — opens when the redeem endpoint returns 409
-            (caller already in a shared account or has domain data).
-            Blocks the flow until the user picks a recovery action so
-            they aren't stuck retrying an inevitable failure. */}
+        {/* Conflict modal */}
         <Dialog
           open={conflictMessage !== null}
           onOpenChange={(open) => {
             if (!open) setConflictMessage(null);
           }}
         >
-          <DialogContent className="bg-popover border-border sm:max-w-md">
+          <DialogContent className="bg-card border-border sm:max-w-md rounded-2xl shadow-xl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-popover-foreground">
-                <AlertTriangle className="size-4 text-amber-400" />
+              <DialogTitle className="flex items-center gap-2 text-foreground text-base">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
                 {t('conflictTitle', { name: peek.account_name })}
               </DialogTitle>
-              <DialogDescription className="text-muted-foreground">
+              <DialogDescription className="text-muted-foreground text-xs mt-1">
                 {conflictMessage}
               </DialogDescription>
             </DialogHeader>
@@ -365,28 +361,30 @@ export default function JoinPage() {
                 {t.rich('conflictBody', {
                   name: peek.account_name,
                   account: (chunks) => (
-                    <span className="text-popover-foreground">{chunks}</span>
+                    <span className="text-foreground font-semibold">{chunks}</span>
                   ),
                 })}
               </p>
             </div>
-            <DialogFooter className="bg-popover border-border">
+            <DialogFooter className="gap-2 sm:gap-0 mt-3">
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => setConflictMessage(null)}
-                className="border-border text-popover-foreground hover:bg-muted"
+                className="border-border text-foreground hover:bg-muted rounded-xl"
               >
                 {t('staySignedIn')}
               </Button>
               <Button
+                size="sm"
                 onClick={handleSignOutAndRetry}
                 disabled={signingOut}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
               >
                 {signingOut ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" />
-                    {t('signingOut')}
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>{t('signingOut')}</span>
                   </>
                 ) : (
                   t('signOutSwitch')
@@ -395,29 +393,47 @@ export default function JoinPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </>
+      </div>
     );
   }
 
   // ----- Not authed: prompt to sign up or sign in -----
-  return (
-    <Card className="w-full max-w-md border-border bg-card">
-      {inviteHeader}
-      <CardContent className="flex flex-col gap-2">
-        <Link href={`/signup?invite=${encodeURIComponent(token!)}`}>
-          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-            {t('createAndJoin')}
-          </Button>
-        </Link>
-        <Link href={`/login?invite=${encodeURIComponent(token!)}`}>
-          <Button
-            variant="outline"
-            className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {t('haveAccount')}
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
+  return renderContainer(
+    <div className="w-full flex flex-col items-center">
+      {inviteHeaderNode}
+
+      <div className="w-full bg-card text-card-foreground border border-border rounded-2xl p-6 sm:p-8 shadow-xl">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold tracking-tight text-foreground">
+            {t.rich('invitedTo', {
+              name: peek.account_name,
+              account: (chunks) => <span className="text-primary">{chunks}</span>,
+            })}
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Create an account or sign in with your email to claim your access.
+          </p>
+        </div>
+
+        {inviteCardDetails}
+
+        <div className="flex flex-col gap-2.5">
+          <Link href={`/signup?invite=${encodeURIComponent(token!)}`}>
+            <button className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer">
+              <UserCheck className="h-4 w-4" />
+              <span>{t('createAndJoin')}</span>
+            </button>
+          </Link>
+          <Link href={`/login?invite=${encodeURIComponent(token!)}`}>
+            <Button
+              variant="outline"
+              className="w-full h-10 border-border text-muted-foreground hover:bg-muted hover:text-foreground text-xs rounded-xl"
+            >
+              {t('haveAccount')}
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }

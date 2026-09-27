@@ -5,20 +5,22 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { MessageSquare, CheckCircle, UsersRound } from "lucide-react";
+  MessageSquare,
+  UsersRound,
+  CheckCircle,
+  Mail,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  ShieldCheck,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
 
-// `useSearchParams` opts the component out of static prerendering
-// unless wrapped in Suspense — same pattern as /login.
 export default function SignupPage() {
   return (
     <Suspense fallback={null}>
@@ -29,11 +31,6 @@ export default function SignupPage() {
 
 function SignupPageInner() {
   const searchParams = useSearchParams();
-  // When the user lands here from `/join/<token>` we carry the
-  // invite token in the query so it survives the signup → email
-  // verification → redirect round-trip. `emailRedirectTo` below
-  // points back at /join/<token> so the user lands on the redeem
-  // step after verifying instead of being dropped on /dashboard.
   const inviteToken = searchParams.get("invite");
   const t = useTranslations("SignupPage");
 
@@ -41,6 +38,8 @@ function SignupPageInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -62,10 +61,6 @@ function SignupPageInner() {
 
     setLoading(true);
 
-    // If we have an invite token, point Supabase's verification
-    // email back at the join page so the user can accept after
-    // verifying. Without a token, Supabase uses its default
-    // redirect (the app root).
     const emailRedirectTo = inviteToken
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
@@ -93,25 +88,28 @@ function SignupPageInner() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-md border-border bg-card">
-          <CardHeader className="items-center text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <CheckCircle className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle className="text-xl text-foreground">
-              {t("checkEmailTitle")}
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {t.rich("checkEmailDesc", {
-                email,
-                strong: (chunks) => (
-                  <span className="text-foreground">{chunks}</span>
-                ),
-              })}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 text-foreground">
+        <div style={{ maxWidth: "440px", width: "100%" }} className="w-full bg-card text-card-foreground border border-border rounded-2xl p-8 shadow-xl text-center">
+          <div className="mb-4 mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary">
+            <CheckCircle className="h-7 w-7" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">
+            {t("checkEmailTitle")}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            {t.rich("checkEmailDesc", {
+              email,
+              strong: (chunks) => (
+                <span className="font-semibold text-foreground">{chunks}</span>
+              ),
+            })}
+          </p>
+
+          <div className="mt-6 p-4 rounded-xl bg-muted/60 border border-border text-xs text-muted-foreground text-center">
+            Please verify your email address to complete registration. Once verified, your account will be activated by the administrator.
+          </div>
+
+          <div className="mt-6">
             <Link
               href={
                 inviteToken
@@ -119,129 +117,219 @@ function SignupPageInner() {
                   : "/login"
               }
             >
-              <Button
-                variant="outline"
-                className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+              <button
+                type="button"
+                className="w-full h-11 border border-border bg-muted hover:bg-muted/80 text-foreground font-semibold text-sm rounded-xl transition-colors cursor-pointer"
               >
                 {t("backToSignIn")}
-              </Button>
+              </button>
             </Link>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md border-border bg-card">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+    <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 text-foreground relative overflow-y-auto">
+      {/* Ambient Top Glow */}
+      <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[500px] h-[260px] bg-primary/10 rounded-full blur-[90px] pointer-events-none" />
+
+      <div style={{ maxWidth: "420px", width: "100%" }} className="flex flex-col items-center mx-auto relative z-10 py-6">
+        {/* Brand Header */}
+        <div className="flex flex-col items-center mb-6 text-center">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs mb-3">
             {inviteToken ? (
               <UsersRound className="h-6 w-6 text-primary" />
             ) : (
               <MessageSquare className="h-6 w-6 text-primary" />
             )}
           </div>
-          <CardTitle className="text-xl text-foreground">
-            {inviteToken ? t("titleJoin") : t("title")}
-          </CardTitle>
-          <CardDescription className="text-muted-foreground">
-            {inviteToken ? t("descJoin") : t("desc")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSignup} className="flex flex-col gap-4">
-            {error && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {error}
-              </div>
-            )}
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="fullName" className="text-muted-foreground">
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">WACRM</h1>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-primary/15 border border-primary/30 text-primary">
+              WhatsApp CRM
+            </span>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {inviteToken ? t("titleJoin") : t("title")}
+          </p>
+        </div>
+
+        {/* Signup Card */}
+        <div className="w-full bg-card text-card-foreground border border-border/80 rounded-2xl p-6 sm:p-7 shadow-lg">
+          <div className="mb-5">
+            <h2 className="text-base font-bold tracking-tight text-foreground">
+              Create Your Company Account
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Start with an isolated workspace and team management
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2.5">
+              <span className="font-bold">Error:</span>
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSignup} className="space-y-4">
+            {/* Full Name */}
+            <div className="space-y-1.5">
+              <Label htmlFor="fullName" className="text-xs font-semibold text-foreground">
                 {t("fullNameLabel")}
               </Label>
-              <Input
-                id="fullName"
-                type="text"
-                placeholder={t("fullNamePlaceholder")}
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
+              <div className="relative flex items-center">
+                <User
+                  style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }}
+                  className="h-4 w-4 text-muted-foreground pointer-events-none"
+                />
+                <input
+                  id="fullName"
+                  type="text"
+                  placeholder={t("fullNamePlaceholder")}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  style={{ height: "44px", paddingLeft: "2.6rem", paddingRight: "1rem" }}
+                  className="w-full bg-background border border-input rounded-xl text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-2xs"
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email" className="text-muted-foreground">
+            {/* Email */}
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-xs font-semibold text-foreground">
                 {t("emailLabel")}
               </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder={t("emailPlaceholder")}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
+              <div className="relative flex items-center">
+                <Mail
+                  style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }}
+                  className="h-4 w-4 text-muted-foreground pointer-events-none"
+                />
+                <input
+                  id="email"
+                  type="email"
+                  placeholder={t("emailPlaceholder")}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  style={{ height: "44px", paddingLeft: "2.6rem", paddingRight: "1rem" }}
+                  className="w-full bg-background border border-input rounded-xl text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-2xs"
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password" className="text-muted-foreground">
+            {/* Password */}
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-xs font-semibold text-foreground">
                 {t("passwordLabel")}
               </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder={t("passwordPlaceholder")}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
+              <div className="relative flex items-center">
+                <Lock
+                  style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }}
+                  className="h-4 w-4 text-muted-foreground pointer-events-none"
+                />
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder={t("passwordPlaceholder")}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{ height: "44px", paddingLeft: "2.6rem", paddingRight: "2.75rem" }}
+                  className="w-full bg-background border border-input rounded-xl text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-2xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)" }}
+                  className="text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="confirmPassword" className="text-muted-foreground">
+            {/* Confirm Password */}
+            <div className="space-y-1.5">
+              <Label htmlFor="confirmPassword" className="text-xs font-semibold text-foreground">
                 {t("confirmPasswordLabel")}
               </Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder={t("confirmPasswordPlaceholder")}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
-              />
+              <div className="relative flex items-center">
+                <Lock
+                  style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }}
+                  className="h-4 w-4 text-muted-foreground pointer-events-none"
+                />
+                <input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder={t("confirmPasswordPlaceholder")}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  style={{ height: "44px", paddingLeft: "2.6rem", paddingRight: "2.75rem" }}
+                  className="w-full bg-background border border-input rounded-xl text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-2xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)" }}
+                  className="text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
-            <Button
+            {/* Create Account Button */}
+            <button
               type="submit"
               disabled={loading}
-              className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              style={{ height: "44px" }}
+              className="w-full mt-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             >
-              {loading ? t("creating") : t("submit")}
-            </Button>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{t("creating")}</span>
+                </>
+              ) : (
+                <>
+                  <span>{t("submit")}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            {t("haveAccount")}{" "}
-            <Link
-              href={
-                inviteToken
-                  ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                  : "/login"
-              }
-              className="text-primary hover:text-primary/80"
-            >
-              {t("signIn")}
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+          {/* Sign In Link */}
+          <div className="mt-6 pt-5 border-t border-border text-center">
+            <p className="text-xs text-muted-foreground">
+              {t("haveAccount")}{" "}
+              <Link
+                href={
+                  inviteToken
+                    ? `/login?invite=${encodeURIComponent(inviteToken)}`
+                    : "/login"
+                }
+                className="font-bold text-primary hover:underline"
+              >
+                {t("signIn")}
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Bottom Trust Badge */}
+        <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-primary" />
+          <span>Multi-Tenant Architecture & Official WhatsApp Cloud API</span>
+        </div>
+      </div>
     </div>
   );
 }

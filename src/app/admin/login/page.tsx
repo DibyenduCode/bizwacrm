@@ -1,37 +1,23 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { Label } from "@/components/ui/label";
 import {
-  MessageSquare,
-  UsersRound,
-  Mail,
+  ShieldCheck,
+  ShieldAlert,
   Lock,
+  Mail,
+  ArrowRight,
   Eye,
   EyeOff,
-  ArrowRight,
-  ShieldCheck,
   Loader2,
-  CheckCircle2,
+  KeyRound,
+  Zap,
 } from "lucide-react";
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginPageInner />
-    </Suspense>
-  );
-}
-
-function LoginPageInner() {
-  const searchParams = useSearchParams();
-  const inviteToken = searchParams.get("invite");
-  const t = useTranslations("LoginPage");
-
+export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -44,65 +30,84 @@ function LoginPageInner() {
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      setError(error.message);
+    if (signInError) {
+      setError(signInError.message);
       setLoading(false);
       return;
     }
 
-    const destination = inviteToken
-      ? `/join/${encodeURIComponent(inviteToken)}`
-      : "/dashboard";
-    window.location.href = destination;
+    if (!data.user) {
+      setError("Failed to retrieve user session.");
+      setLoading(false);
+      return;
+    }
+
+    // Verify if user is super admin
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("is_super_admin")
+      .eq("user_id", data.user.id)
+      .single();
+
+    if (profileError || !profile?.is_super_admin) {
+      await supabase.auth.signOut();
+      setError("Access Denied: This portal is strictly reserved for Super Administrators.");
+      setLoading(false);
+      return;
+    }
+
+    window.location.href = "/admin";
+  };
+
+  const handleQuickFill = () => {
+    setEmail("admin@crm.local");
+    setPassword("Admin@123456");
   };
 
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-6 text-foreground relative overflow-hidden">
-      {/* Ambient Top Glow */}
-      <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[650px] h-[360px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 text-foreground relative overflow-y-auto">
+      {/* Subtle Ambient Radial Glow */}
+      <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[500px] h-[260px] bg-primary/10 rounded-full blur-[90px] pointer-events-none" />
 
       <div style={{ maxWidth: "420px", width: "100%" }} className="flex flex-col items-center mx-auto relative z-10 py-6">
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-6 text-center">
           <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs mb-3">
-            {inviteToken ? (
-              <UsersRound className="h-6 w-6 text-primary" />
-            ) : (
-              <MessageSquare className="h-6 w-6 text-primary" />
-            )}
+            <ShieldCheck className="h-6 w-6 text-primary" />
           </div>
 
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">WACRM</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Super Admin Console</h1>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-primary/15 border border-primary/30 text-primary">
-              WhatsApp CRM
+              Master Access
             </span>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            {inviteToken ? t("titleAccept") : t("titleWelcome")}
+            Multi-organization user management and tenant activation
           </p>
         </div>
 
-        {/* Login Card */}
-        <div className="w-full bg-card text-card-foreground border border-border/80 rounded-2xl p-6 sm:p-7 shadow-lg">
+        {/* Admin Login Card */}
+        <div className="w-full bg-card text-card-foreground border border-border rounded-2xl p-6 sm:p-7 shadow-lg">
           <div className="mb-5">
-            <h2 className="text-base font-bold tracking-tight text-foreground">
-              Sign In to Your Workspace
+            <h2 className="text-base font-bold tracking-tight text-foreground flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-primary" />
+              Master Credentials
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Enter your registered email and password to continue
+              Enter your platform administrator credentials
             </p>
           </div>
 
           {error && (
             <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2.5">
-              <span className="font-bold">Error:</span>
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
@@ -110,8 +115,8 @@ function LoginPageInner() {
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Email Field */}
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-semibold text-foreground">
-                {t("emailLabel")}
+              <Label htmlFor="admin-email" className="text-xs font-semibold text-foreground">
+                Administrator Email
               </Label>
               <div className="relative flex items-center">
                 <Mail
@@ -119,9 +124,9 @@ function LoginPageInner() {
                   className="h-4 w-4 text-muted-foreground pointer-events-none"
                 />
                 <input
-                  id="email"
+                  id="admin-email"
                   type="email"
-                  placeholder={t("emailPlaceholder")}
+                  placeholder="admin@crm.local"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -133,26 +138,18 @@ function LoginPageInner() {
 
             {/* Password Field */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-xs font-semibold text-foreground">
-                  {t("passwordLabel")}
-                </Label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs font-medium text-primary hover:underline transition-colors"
-                >
-                  {t("forgotPassword")}
-                </Link>
-              </div>
+              <Label htmlFor="admin-password" className="text-xs font-semibold text-foreground">
+                Security Password
+              </Label>
               <div className="relative flex items-center">
                 <Lock
                   style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }}
                   className="h-4 w-4 text-muted-foreground pointer-events-none"
                 />
                 <input
-                  id="password"
+                  id="admin-password"
                   type={showPassword ? "text" : "password"}
-                  placeholder={t("passwordPlaceholder")}
+                  placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -180,49 +177,41 @@ function LoginPageInner() {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>{t("signingIn")}</span>
+                  <span>Authenticating...</span>
                 </>
               ) : (
                 <>
-                  <span>{t("signIn")}</span>
+                  <span>Sign In as Super Admin</span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Links & Switchers */}
-          <div className="mt-6 pt-5 border-t border-border text-center space-y-3">
-            <p className="text-xs text-muted-foreground">
-              {t("noAccount")}{" "}
-              <Link
-                href={
-                  inviteToken
-                    ? `/signup?invite=${encodeURIComponent(inviteToken)}`
-                    : "/signup"
-                }
-                className="font-bold text-primary hover:underline"
-              >
-                {t("createAccount")}
-              </Link>
-            </p>
+          {/* Quick Actions & Switchers */}
+          <div className="mt-5 pt-4 border-t border-border flex items-center justify-between text-xs">
+            <button
+              type="button"
+              onClick={handleQuickFill}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 font-semibold cursor-pointer transition-colors"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              <span>Fill Default Admin</span>
+            </button>
 
-            <div className="pt-2">
-              <Link
-                href="/admin/login"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg border border-border transition-colors"
-              >
-                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                <span>Super Admin Portal Login →</span>
-              </Link>
-            </div>
+            <Link
+              href="/login"
+              className="text-muted-foreground hover:text-foreground transition-colors font-medium"
+            >
+              User Login →
+            </Link>
           </div>
         </div>
 
         {/* Bottom Trust Badge */}
-        <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-          <CheckCircle2 className="h-4 w-4 text-primary" />
-          <span>Official WhatsApp Cloud API & Multi-Tenant Isolation</span>
+        <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span>Restricted Admin Portal • Session Audit Logged</span>
         </div>
       </div>
     </div>
