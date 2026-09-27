@@ -48,4 +48,8 @@ next-env.d.ts
 **/*.md
 !README.md
 !**/README.md
+!CONTRIBUTING.md
+!.github/**/*.md
+!docs/**/*.md
+
 
