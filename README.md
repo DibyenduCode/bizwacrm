@@ -3,10 +3,6 @@
 > Modern, self-hostable CRM and customer engagement platform for the official WhatsApp® Business Cloud API. Featuring a **Super Admin Dashboard**, **User Approval & Verification Workflow**, **Multi-Agent Shared Inbox**, **Visual No-Code Flow Builder**, **AI Assistant with RAG Knowledge Base**, **Kanban Sales Pipelines**, and **Meta-Approved Broadcasts**.
 
 <p align="center">
-  <img src="./.github/assets/hostinger-deploy.png" alt="BizWACRM Platform" width="900">
-</p>
-
-<p align="center">
   <a href="https://github.com/DibyenduCode/bizwacrm/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-violet.svg" alt="License: MIT"></a>
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16.3-black?logo=nextdotjs" alt="Next.js 16"></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19.2-blue?logo=react" alt="React 19"></a>
@@ -206,19 +202,19 @@ WHERE email = 'admin@yourdomain.com';
 
 ## 🚢 Deployment
 
-### Deploying to Hostinger (Recommended)
-BizWACRM runs smoothly on Hostinger Managed Node.js:
-1. Push your repository to GitHub.
-2. In Hostinger **hPanel → Websites → Create/Manage**, select **Node.js**.
-3. Connect your GitHub repository (`DibyenduCode/bizwacrm`).
-4. Set the build command to `npm run build` and start command to `npm run start`.
-5. Enter all required environment variables in the hPanel Environment section.
-6. Trigger deployment.
-
 ### Deploying to Vercel
 1. Import the repository into your Vercel dashboard.
 2. Configure all environment variables in project settings.
 3. Deploy! The project includes build-time fallbacks and middleware guards to ensure zero-failure builds even during static generation passes.
+
+### Deploying to Hostinger / Node.js Hosting
+BizWACRM runs smoothly on Hostinger Managed Node.js or any Node.js host:
+1. Push your repository to GitHub.
+2. In your hosting panel (e.g. Hostinger **hPanel → Websites → Create/Manage**, select **Node.js**).
+3. Connect your GitHub repository (`DibyenduCode/bizwacrm`).
+4. Set the build command to `npm run build` and start command to `npm run start`.
+5. Enter all required environment variables in the environment settings.
+6. Trigger deployment.
 
 ### Deploying with Docker
 BizWACRM includes production-ready Docker support:
